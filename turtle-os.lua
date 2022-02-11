@@ -5,6 +5,24 @@ local event = require('event')
 local robot_api = require('robot')
 local thread = require('thread')
 
+
+local Stack = {}
+
+function Stack:new()
+    local s = {}
+    s._top = 1
+    function s:pop()
+        assert(self._top > 0, "tried to pop pop an empty stack")
+        local item = self[self._top]
+        self._top = self._top - 1
+        return item
+    end
+    function s:push(item)
+        self[self._top] = item
+    end
+    return s
+end
+
 function table.deepcopy(tbl)
     local out = {}
     for k, v in pairs(tbl) do
@@ -58,10 +76,52 @@ function Coord:new(x, y, z)
         rs.z = self.z - b.z
         return rs
     end
+    function c:mul(b)
+        local rs = table.deepcopy(self)
+        rs.x = self.x * b
+        rs.y = self.y * b
+        rs.z = self.z * b
+        return rs
+    end
+    function c:div(b)
+        local rs = table.deepcopy(self)
+        rs.x = self.x / b
+        rs.y = self.y / b
+        rs.z = self.z / b
+        return rs
+    end
+    function c:length()
+        return math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
+    end
+    function c:normalised()
+        local mag = self:length()
+        return self:div(mag)
+    end
 
-    return c
+    return setmetatable(c, {
+        __sub = function(lhs, rhs)
+            return lhs:sub(rhs)
+        end,
+        __add = function(lhs, rhs)
+            return lhs:add(rhs)
+        end,
+        __tostring = function(tbl) tbl:tostring() end,
+        __eq = function(lhs, rhs)
+            return lhs.x == rhs.x and lhs.y == rhs.y and lhs.z == rhs.z
+        end
+    })
 end
 
+function Coord:x(n)
+    return { x = n, y = 0, z = 0 }
+end
+
+function Coord:y(n)
+    return { z = n, y = 0, x = 0 }
+end
+function Coord:z(n)
+    return { y = n, x = 0, z = 0 }
+end
 
 local MineContext = {}
 function MineContext:new(width, height, home)
@@ -95,7 +155,7 @@ function MineContext:new(width, height, home)
 
     function m:move(to)
         local translate = to
-        function point_and_move(side, blocks)
+        local function point_and_move(side, blocks)
             if blocks == 0 then
                 return
             end
@@ -147,11 +207,17 @@ function MineContext:new(width, height, home)
         self:move(to:sub(self.pos))
     end
     function m:tick()
-        local target = Coord:new()
+        local moves = Stack:new()
+        local function line_path(vec)
+            local unit = vec:normalised()
+            for _ = Coord:new(), vec, unit do
+                moves:push(unit)
+            end
+        end
         --print("tick: " .. self.home:tostring())
-        if self.corner ~= 'topright' and self.pos.x >= self.max_width and self.pos.y >= self.max_height then
-            target.z = target.z + 1
-            self.corner = 'topright'
+        if self.pos.x >= self.max_width and self.pos.y >= self.max_height then -- top right
+            moves:push(Coord:z(1))
+            moves:push(Coord:)
         elseif self.corner ~= 'topleft' and self.pos.x <= self.home.x and self.pos.y >= self.max_height then
             target.z = target.z + 1
             self.corner = 'topleft'
@@ -174,7 +240,7 @@ function MineContext:new(width, height, home)
     m.max_height = tonumber(height)
     m.home = home
     m.pos = Coord:new()
-    m.corner = 'botleft'
+    m.corner = ''
     m.direction = sides.forward
     return m
 end
@@ -203,6 +269,8 @@ local function handle_start_cmd(context, width, height)
     context.minectx.max_width = tonumber(width)
     context.minectx.max_height = tonumber(height)
     context.mine_thread = thread.create(function(ctx)
+        ctx.pos = Coord:new()
+        ctx.home = Coord:new()
         while true do
             if not xpcall(function() ctx:tick() end, function(err) print("error while mining: ", err) end) then
                 print("aborting mine due to errors")
