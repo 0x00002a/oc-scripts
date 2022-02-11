@@ -146,6 +146,7 @@ function MineContext:new(width, height, home)
     end
     function m:tick()
         local target = table.deepcopy(self.pos)
+        --print("tick: " .. self.home:tostring())
         if self.corner ~= 'topright' and self.pos.x >= self.max_width and self.pos.y >= self.max_height then
             target.z = target.z + 1
             self.corner = 'topright'
@@ -164,8 +165,8 @@ function MineContext:new(width, height, home)
         end
         self:moveabs(target)
     end
-    m.max_width = width
-    m.max_height = height
+    m.max_width = tonumber(width)
+    m.max_height = tonumber(height)
     m.home = home
     m.pos = Coord:new()
     m.corner = 'botleft'
@@ -194,10 +195,16 @@ local function handle_start_cmd(context, width, height)
         print("already mining!")
         return
     end
-    context.minectx.max_width = width
-    context.minectx.max_height = height
+    context.minectx.max_width = tonumber(width)
+    context.minectx.max_height = tonumber(height)
     context.mine_thread = thread.create(function(ctx)
-        ctx:tick()
+        while true do
+            if not xpcall(function() ctx:tick() end, function(err) print("error while mining: ", err) end) then
+                print("aborting mine due to errors")
+                break
+            end
+            os.sleep(0.1)
+        end
     end, table.deepcopy(context.minectx))
     print("started mining")
 end
