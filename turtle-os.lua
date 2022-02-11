@@ -67,35 +67,64 @@ local MineContext = {}
 function MineContext:new(width, height, home)
     local m = {}
 
+    function m:rotate(clockwise)
+        local newside = nil
+        if self.direction == sides.back then
+            newside = (clockwise and sides.left) or sides.right
+        elseif self.direction == sides.forward then
+            newside = (clockwise and sides.right) or sides.left
+        elseif self.direction == sides.right then
+            newside = (clockwise and sides.back) or sides.forward
+
+        elseif self.direction == sides.left then
+            newside = (clockwise and sides.forward) or sides.back
+        end
+        self.direction = newside
+        robot.turn(clockwise)
+    end
+    function m:point_to(side)
+        if self.direction == side then
+            return
+        end
+        local clockwise = true -- TODO: optimisation point, reduce turns
+        while self.direction ~= side do
+            self:rotate(clockwise)
+        end
+    end
+
     function m:move(to)
         local translate = to
         if translate.z > 0 then
-            for i = 0, translate.z do
+            self:point_to(sides.forward)
+            for _ = 0, translate.z - 1 do
                 robot.move(sides.forward)
             end
         elseif translate.z < 0 then
-            for i = translate.z, -1 do
+            self:point_to(sides.forward)
+            for _ = translate.z, -1 do
                 robot.move(sides.back)
             end
         end
 
         if translate.y > 0 then
-            for i = 0, translate.y do
+            for _ = 0, translate.y - 1 do
                 robot.move(sides.up)
             end
         elseif translate.y < 0 then
-            for i = translate.y, -1 do
+            for _ = translate.y, -1 do
                 robot.move(sides.down)
             end
         end
 
         if translate.x > 0 then
-            for i = 0, translate.x do
-                robot.move(sides.right)
+            self:point_to(sides.right)
+            for _ = 0, translate.x - 1 do
+                robot.move(sides.forward)
             end
         elseif translate.x < 0 then
-            for i = translate.x, -1 do
-                robot.move(sides.left)
+            self:point_to(sides.left)
+            for _ = translate.x, -1 do
+                robot.move(sides.forward)
             end
         end
         print("move: " .. self.pos:tostring() .. ' -> ' .. to:tostring())
@@ -130,6 +159,7 @@ function MineContext:new(width, height, home)
     m.home = home
     m.pos = Coord:new()
     m.corner = 'botleft'
+    m.direction = sides.forward
     return m
 end
 
