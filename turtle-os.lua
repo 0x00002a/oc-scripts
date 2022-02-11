@@ -37,11 +37,11 @@ local Coord = {}
 
 function Coord:new(x, y, z)
     local c = {}
-    c.x = x or 0
-    c.y = y or 0
-    c.z = z or 0
+    c.x = tonumber(x) or 0
+    c.y = tonumber(y) or 0
+    c.z = tonumber(z) or 0
     function c:tostring()
-        return '{ x: ' .. self.x .. ", y: " .. self.y .. ', z: ' .. self.z .. " }"
+        return '{ x: ' .. tostring(self.x) .. ", y: " .. tostring(self.y) .. ', z: ' .. tostring(self.z) .. " }"
     end
 
     function c:add(b)
@@ -68,13 +68,13 @@ function MineContext:new(width, height, home)
     local m = {}
 
     function m:move(to)
-        local translate = to:sub(self.pos)
+        local translate = to
         if translate.z > 0 then
             for i = 0, translate.z do
                 robot.move(sides.forward)
             end
         elseif translate.z < 0 then
-            for i = translate.z, 0, -1 do
+            for i = translate.z, -1 do
                 robot.move(sides.back)
             end
         end
@@ -84,7 +84,7 @@ function MineContext:new(width, height, home)
                 robot.move(sides.up)
             end
         elseif translate.y < 0 then
-            for i = translate.y, 0, -1 do
+            for i = translate.y, -1 do
                 robot.move(sides.down)
             end
         end
@@ -94,12 +94,16 @@ function MineContext:new(width, height, home)
                 robot.move(sides.right)
             end
         elseif translate.x < 0 then
-            for i = translate.x, 0, -1 do
+            for i = translate.x, -1 do
                 robot.move(sides.left)
             end
         end
         print("move: " .. self.pos:tostring() .. ' -> ' .. to:tostring())
         self.pos = to
+    end
+
+    function m:moveabs(to)
+        self:move(to:sub(self.pos))
     end
     function m:tick()
         local target = table.deepcopy(self.pos)
@@ -119,7 +123,7 @@ function MineContext:new(width, height, home)
         elseif self.pos.x <= self.home.x then
             target.x = target.x + 1
         end
-        self:move(target)
+        self:moveabs(target)
     end
     m.max_width = width
     m.max_height = height
@@ -189,7 +193,6 @@ local function handle_movrel_cmd(ctx, dx, dy, dz)
         return
     end
     local to = Coord:new(dx, dy, dz)
-    print("movecmd: " .. to:tostring() .. " : " .. Coord:new(tonumber(dx), tonumber(dy), tonumber(dz)):tostring())
     ctx.minectx:move(to)
 end
 
