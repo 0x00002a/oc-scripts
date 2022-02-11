@@ -281,10 +281,10 @@ function MineContext:new(width, height, home)
             return function()
                 if not self.moves:empty() then
                     return self.moves:pop()
-                elseif self.pos == self.home then -- in and up, botleft
+                elseif self.pos.x == self.home.x and self.pos.y == self.home.y then -- in and up, botleft
                     print("home")
                     return in_and_d(1)
-                elseif self.pos.x >= self.max_width and self.pos.y >= self.max_height then -- in and down, topright
+                elseif self.pos.x >= self.max_width and ((((self.max_width % 2 == 1) and self.pos.y >= self.max_height) or (self.pos.y <= self.home.y))) then -- in and down, topright
                     print("topleft")
                     return in_and_d(-1)
                 else -- we're out of position, reset
