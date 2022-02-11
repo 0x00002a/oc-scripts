@@ -140,7 +140,7 @@ function MineContext:new(width, height, home)
         handle_negatives()
         handle_positives()
 
-        self.pos = to
+        self.pos = self.pos:add(to)
     end
 
     function m:moveabs(to)
