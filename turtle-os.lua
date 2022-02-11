@@ -92,42 +92,52 @@ function MineContext:new(width, height, home)
         end
     end
 
+
     function m:move(to)
         local translate = to
-        if translate.z > 0 then
-            self:point_to(sides.forward)
-            for _ = 0, translate.z - 1 do
-                robot.move(sides.forward)
+        function point_and_move(side, blocks)
+            if blocks == 0 then
+                return
             end
-        elseif translate.z < 0 then
-            self:point_to(sides.forward)
-            for _ = translate.z, -1 do
-                robot.move(sides.back)
-            end
-        end
 
-        if translate.y > 0 then
-            for _ = 0, translate.y - 1 do
-                robot.move(sides.up)
-            end
-        elseif translate.y < 0 then
-            for _ = translate.y, -1 do
-                robot.move(sides.down)
+            self:point_to(side)
+            for _ = 1, math.abs(blocks) do
+                robot.move(sides.forward)
             end
         end
+        local function handle_negatives()
+            if translate.x < 0 then
+                point_and_move(sides.left, translate.x)
+            end
 
-        if translate.x > 0 then
-            self:point_to(sides.right)
-            for _ = 0, translate.x - 1 do
-                robot.move(sides.forward)
+            -- special case, cannot point up or down
+            if translate.y < 0 then
+                for _ = translate.y, -1 do
+                    robot.move(sides.down)
+                end
             end
-        elseif translate.x < 0 then
-            self:point_to(sides.left)
-            for _ = translate.x, -1 do
-                robot.move(sides.forward)
+            if translate.z < 0 then
+                point_and_move(sides.back, translate.z)
             end
         end
-        print("move: " .. self.pos:tostring() .. ' -> ' .. to:tostring())
+        local function handle_positives()
+            if translate.z > 0 then
+               point_and_move(sides.forward, translate.z)
+            end
+
+            -- special case, cannot point up or down
+            if translate.y > 0 then
+                for _ = 1, translate.y do
+                    robot.move(sides.down)
+                end
+            end
+            if translate.x > 0 then
+                point_and_move(sides.right, translate.x)
+            end
+        end
+        handle_negatives()
+        handle_positives()
+
         self.pos = to
     end
 
