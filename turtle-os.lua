@@ -152,6 +152,16 @@ local function handle_start_cmd(context, width, height)
 end
 DIGIT_PATTERN = "[(%-%d+)(%d+)]"
 
+function table.from_generator(gen)
+    local out = {}
+    local i = 1
+    for v in gen do
+        out[i] = v
+        i = i + 1
+    end
+    return out
+end
+
 local RunContext = {}
 function RunContext:new()
     local ctx = {}
@@ -161,16 +171,17 @@ function RunContext:new()
 
     function ctx:cmdloop()
         local function unpack_ent(entry)
-            local reg = #"(%a+)%s?(.+)"
-            local cmd, args = string.gmatch(entry, reg)
-            return cmd, args
+            local reg = "(%a+)%s?(.+)"
+            for cmd, args in string.gmatch(entry, reg) do
+                return cmd, args
+            end
         end
         io.stdout:write("> ")
         local ent_raw = io.stdin:read('*l')
         local cmd, args_raw = unpack_ent(ent_raw)
         local cmd_tbl = {
             moveabs = { string.format('(%s) (%s) (%s)', DIGIT_PATTERN, DIGIT_PATTERN, DIGIT_PATTERN), handle_moveabs_cmd },
-            start = { string.format('(%d+) (%d+)', DIGIT_PATTERN, DIGIT_PATTERN, handle_start_cmd) },
+            start = { '(%d+) (%d+)', handle_start_cmd },
             stop = { nil, handle_stop_cmd },
         }
         local resolved_cmd = cmd_tbl[cmd]
@@ -178,8 +189,8 @@ function RunContext:new()
             print("unknown command: '" .. cmd .. "'")
             return
         end
-        local args = ((resolved_cmd[1] ~= nil) and string.gmatch(args_raw, resolved_cmd[1])) or {}
-        resolved_cmd[2](self, unpack(args))
+        local args = ((resolved_cmd[1] ~= nil) and table.from_generator(string.gmatch(args_raw, resolved_cmd[1]))) or {}
+        resolved_cmd[2](self, table.unpack(args))
     end
 
 
