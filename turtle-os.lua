@@ -203,7 +203,7 @@ function MineContext:new(width, height, home)
     end
 
 
-    function m:move(to)
+    function m:move(to, swing)
         local translate = to
         local function point_and_move(side, blocks)
             if blocks == 0 then
@@ -213,6 +213,10 @@ function MineContext:new(width, height, home)
             local oldside = self.direction
             self:point_to(side)
             for _ = 1, math.abs(blocks) do
+                if swing then
+                    local rs, why = robot.swing(sides.forward)
+                    print("swing: " .. tostring(rs) .. " : " .. (why or ''))
+                end
                 robot.move(sides.forward)
             end
             self:point_to(oldside)
@@ -225,6 +229,9 @@ function MineContext:new(width, height, home)
             -- special case, cannot point up or down
             if translate.y < 0 then
                 for _ = translate.y, -1 do
+                    if swing then
+                        robot.swing(sides.down)
+                    end
                     robot.move(sides.down)
                 end
             end
@@ -240,6 +247,9 @@ function MineContext:new(width, height, home)
             -- special case, cannot point up or down
             if translate.y > 0 then
                 for _ = 1, translate.y do
+                    if swing then
+                        robot.swing(sides.up)
+                    end
                     robot.move(sides.up)
                 end
             end
@@ -268,9 +278,6 @@ function MineContext:new(width, height, home)
         end
         local function path_iterator()
             local function in_and_d(initial)
-                if (initial == 1) then
-                   self.moves:push(Coord:z(1))
-                end
                 local last_sign = initial
                 for i = 1, self.max_width do
                     line_path(self.moves, Coord:y(last_sign):mul(self.max_height)) -- Down
@@ -297,7 +304,7 @@ function MineContext:new(width, height, home)
                 end
             end
         end
-        self:move(path_iterator()())
+        self:move(path_iterator()(), true)
     end
     m.max_width = tonumber(width)
     m.max_height = tonumber(height)
