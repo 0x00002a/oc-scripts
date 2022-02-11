@@ -261,7 +261,7 @@ function MineContext:new(width, height, home)
         local function line_path(moves, vec)
             local unit = vec:ceil(vec:normalised())
             local v = Coord:new()
-            while vec >= v do
+            while v:length() < vec:length() do
                 --print("PUSH: " .. v:tostring() .. " vs " .. vec:tostring())
                 moves:push(unit)
                 v = v:add(unit)
