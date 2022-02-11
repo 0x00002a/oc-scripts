@@ -3,6 +3,7 @@ local component = require('component')
 local robot = component.proxy(component.list('robot')())
 local event = require('event')
 local robot_api = require('robot')
+local thread = require('thread')
 
 function table.deepcopy(tbl)
     local out = {}
@@ -34,11 +35,11 @@ end
 
 local Coord = {}
 
-function Coord:new()
+function Coord:new(x, y, z)
     local c = {}
-    c.x = 0
-    c.y = 0
-    c.z = 0
+    c.x = x or 0
+    c.y = y or 0
+    c.z = z or 0
     function c:tostring()
         return '{ x: ' .. self.x .. ", y: " .. self.y .. ', z: ' .. self.z .. " }"
     end
@@ -122,23 +123,79 @@ function MineContext:new(width, height, home)
     return m
 end
 
+local function handle_stop_cmd(context)
+    if context.mine_thread == nil then
+        print("not running!")
+        return
+    end
+    context.mine_thread:kill()
+end
+local function handle_moveabs_cmd(context, tox, toy, toz)
+    if context.mine_thread ~= nil then
+        print("cannot move while mining, please run stop first")
+        return
+    end
+    context.minectx:move(Coord:new(tox, toy, toz))
+end
 
+local function handle_start_cmd(context, width, height)
+    if context.mine_thread ~= nil then
+        print("already mining!")
+        return
+    end
+    context.minectx.max_width = width
+    context.minectx.max_height = height
+    context.mine_thread = thread.create(function(ctx)
+        ctx:tick()
+    end, table.deepcopy(context.minectx))
+    print("started mining")
+end
+DIGIT_PATTERN = "[(%-%d+)(%d+)]"
 
+local RunContext = {}
+function RunContext:new()
+    local ctx = {}
+    ctx.running = true
+    ctx.minectx = MineContext:new(0, 0, Coord:new())
+    ctx.mine_thread = nil
 
-local function mainloop()
-    local context = MineContext:new(10, 10, Coord:new())
-    while true do
-        local id, _, x, y = event.pull(0.01, "interrupted")
-        if id == 'interrupted' then
-            print("stopping")
-            break
-        else
-            context:tick()
+    function ctx:cmdloop()
+        local function unpack_ent(entry)
+            local reg = #"(%a+)%s?(.+)"
+            local cmd, args = string.gmatch(entry, reg)
+            return cmd, args
         end
+        io.stdout:write("> ")
+        local ent_raw = io.stdin:read('*l')
+        local cmd, args_raw = unpack_ent(ent_raw)
+        local cmd_tbl = {
+            moveabs = { string.format('(%s) (%s) (%s)', DIGIT_PATTERN, DIGIT_PATTERN, DIGIT_PATTERN), handle_moveabs_cmd },
+            start = { string.format('(%d+) (%d+)', DIGIT_PATTERN, DIGIT_PATTERN, handle_start_cmd) },
+            stop = { nil, handle_stop_cmd },
+        }
+        local resolved_cmd = cmd_tbl[cmd]
+        if resolved_cmd == nil then
+            print("unknown command: '" .. cmd .. "'")
+            return
+        end
+        local args = ((resolved_cmd[1] ~= nil) and string.gmatch(args_raw, resolved_cmd[1])) or {}
+        resolved_cmd[2](self, unpack(args))
     end
 
 
+    function ctx:mainloop()
+        while self.running do
+            local id, _, x, y = event.pull(0.01, "interrupted")
+            if id == 'interrupted' then
+                print("stopping")
+                break
+            else
+                self:cmdloop()
+            end
+        end
+    end
+    return ctx
 end
 
 
-mainloop()
+RunContext:new():mainloop()
