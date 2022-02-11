@@ -4,6 +4,7 @@ local robot = component.proxy(component.list('robot')())
 local event = require('event')
 local robot_api = require('robot')
 local thread = require('thread')
+local computer = require('computer')
 
 
 local Stack = {}
@@ -351,7 +352,7 @@ local function handle_start_cmd(context, width, height)
             end
             os.sleep(0.01)
         end
-    end, table.deepcopy(context.minectx))
+    end, context.minectx)
     print("started mining")
 end
 
@@ -389,12 +390,35 @@ local function handle_movrel_cmd(ctx, dx, dy, dz)
     ctx.minectx:move(to)
 end
 
+local function charge_percent()
+    return (computer.energy() / computer.maxEnergy()) * 100.0
+end
+
+local function needs_recharge(charging)
+    if charging then
+        return charge_percent() < 100.0
+    else
+        return charge_percent() < 20.0
+    end
+end
+local function tool_ok()
+    local has_equip, curr_dur, _, why = robot.durability()
+    return (has_equip == nil and why == 'tool cannot be damaged') or (curr_dur > 0)
+end
+local function needs_restock(charging)
+    return not tool_ok() or needs_recharge(charging)
+end
+
 local RunContext = {}
+
 function RunContext:new()
     local ctx = {}
     ctx.running = true
     ctx.minectx = MineContext:new(0, 0, Coord:new())
     ctx.mine_thread = nil
+    ctx.last_charge = charge_percent()
+    ctx.saved_pos = nil
+    ctx.restocking = false
 
     function ctx:cmdloop()
         local function unpack_ent(entry)
@@ -428,16 +452,23 @@ function RunContext:new()
         resolved_cmd[2](self, table.unpack(args))
     end
 
-
     function ctx:mainloop()
         while self.running do
             local id, _, x, y = event.pull(0.01, "interrupted")
             if id == 'interrupted' then
+                handle_exit_cmd(self)
                 print("stopping")
-                break
+            elseif needs_recharge(self.last_charge < charge_percent()) and not self.restocking then
+                if self.mine_thread ~= nil then
+                    handle_stop_cmd(self)
+                end
+                self.saved_pos = self.minectx.pos
+                self.minectx:moveabs(self.minectx.home)
+                self.restocking = true
             else
                 self:cmdloop()
             end
+            self.last_charge = charge_percent()
         end
     end
     return ctx
