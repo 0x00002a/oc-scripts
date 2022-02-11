@@ -100,10 +100,12 @@ function MineContext:new(width, height, home)
                 return
             end
 
+            local oldside = self.direction
             self:point_to(side)
             for _ = 1, math.abs(blocks) do
                 robot.move(sides.forward)
             end
+            self:point_to(oldside)
         end
         local function handle_negatives()
             if translate.x < 0 then
@@ -128,7 +130,7 @@ function MineContext:new(width, height, home)
             -- special case, cannot point up or down
             if translate.y > 0 then
                 for _ = 1, translate.y do
-                    robot.move(sides.down)
+                    robot.move(sides.up)
                 end
             end
             if translate.x > 0 then
@@ -145,7 +147,7 @@ function MineContext:new(width, height, home)
         self:move(to:sub(self.pos))
     end
     function m:tick()
-        local target = table.deepcopy(self.pos)
+        local target = Coord:new()
         --print("tick: " .. self.home:tostring())
         if self.corner ~= 'topright' and self.pos.x >= self.max_width and self.pos.y >= self.max_height then
             target.z = target.z + 1
@@ -159,11 +161,14 @@ function MineContext:new(width, height, home)
             target.y = target.y + 1
             self.corner = 'botright'
         elseif self.pos.x <= self.home.x and self.pos.y <= self.home.y then
+            print("mov y")
             target.y = target.y + 1
         elseif self.pos.x <= self.home.x then
+            print("mov x")
             target.x = target.x + 1
         end
-        self:moveabs(target)
+        print("mov: ", table.tostring(target))
+        self:move(target)
     end
     m.max_width = tonumber(width)
     m.max_height = tonumber(height)
