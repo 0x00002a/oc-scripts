@@ -262,17 +262,21 @@ function MineContext:new(width, height, home)
             local unit = vec:ceil(vec:normalised())
             local v = Coord:new()
             while v:length() < vec:length() do
-                --print("PUSH: " .. v:tostring() .. " vs " .. vec:tostring())
                 moves:push(unit)
                 v = v:add(unit)
             end
         end
         local function path_iterator()
             local function in_and_d(initial)
-                self.moves:push(Coord:z(1))
+                if (initial == 1) then
+                   self.moves:push(Coord:z(1))
+                end
                 local last_sign = initial
-                for _ = 1, self.max_width do
+                for i = 1, self.max_width do
                     line_path(self.moves, Coord:y(last_sign):mul(self.max_height)) -- Down
+                    if initial == -1 and i == 1 then
+                        self.moves:push(Coord:z(1))
+                    end
                     last_sign = last_sign * -1
                     self.moves:push(Coord:x(initial))
                 end
@@ -288,6 +292,7 @@ function MineContext:new(width, height, home)
                     print("topleft")
                     return in_and_d(-1)
                 else -- we're out of position, reset
+                    print("reset")
                     return self.home
                 end
             end
