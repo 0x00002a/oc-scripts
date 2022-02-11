@@ -10,15 +10,45 @@ local Stack = {}
 
 function Stack:new()
     local s = {}
-    s._top = 1
+    s._top = 0
     function s:pop()
-        assert(self._top > 0, "tried to pop pop an empty stack")
+        assert(not self:empty(), "tried to pop pop an empty stack")
         local item = self[self._top]
         self._top = self._top - 1
         return item
     end
     function s:push(item)
+        self._top = self._top + 1
         self[self._top] = item
+    end
+    function s:empty()
+        return self._top == 0
+    end
+    return s
+end
+
+local Queue = {}
+
+function Queue:new()
+    local s = {}
+    s._front = 1
+    s._back = 1
+    function s:pop()
+        assert(not self:empty(), "tried to pop pop an empty queue")
+        local item = self[self._back]
+        self._back = self._back + 1
+        if self:empty() then -- small optimisation to reduce massive indexes
+            self._front = 1
+            self._back = 1
+        end
+        return item
+    end
+    function s:push(item)
+        self[self._front] = item
+        self._front = self._front + 1
+    end
+    function s:empty()
+        return self._front == self._back
     end
     return s
 end
@@ -97,6 +127,13 @@ function Coord:new(x, y, z)
         local mag = self:length()
         return self:div(mag)
     end
+    function c:ceil()
+        local rs = table.deepcopy(self)
+        rs.x = math.ceil(rs.x)
+        rs.y = math.ceil(rs.y)
+        rs.z = math.ceil(rs.z)
+        return rs
+    end
 
     return setmetatable(c, {
         __sub = function(lhs, rhs)
@@ -105,22 +142,35 @@ function Coord:new(x, y, z)
         __add = function(lhs, rhs)
             return lhs:add(rhs)
         end,
-        __tostring = function(tbl) tbl:tostring() end,
+        __mul = function(this, v)
+            return this:mul(v)
+        end,
+        __tostring = function(tbl) return tbl:tostring() end,
         __eq = function(lhs, rhs)
             return lhs.x == rhs.x and lhs.y == rhs.y and lhs.z == rhs.z
-        end
+        end,
+        __lt = function(lhs, rhs)
+            return lhs.x < rhs.x and lhs.y < rhs.y and lhs.z < rhs.z
+        end,
+        __le = function(lhs, rhs) return lhs == rhs or lhs < rhs end,
     })
 end
 
 function Coord:x(n)
-    return { x = n, y = 0, z = 0 }
+    return Coord:new(n, nil, nil)
 end
 
 function Coord:y(n)
-    return { z = n, y = 0, x = 0 }
+    return Coord:new(nil, n, nil)
 end
 function Coord:z(n)
-    return { y = n, x = 0, z = 0 }
+    return Coord:new(nil, nil, n)
+end
+
+local function test()
+    assert(Coord:new(1, 0, 0):normalised() == Coord:new(1, 0, 0), "coord normalised converts to unit vector")
+    assert(Coord:new(4, 0, 0):normalised() == Coord:new(1, 0, 0), "coord normalised converts to unit vector for 4, 0, 0")
+    assert(Coord:new(1.0, 0, 0) == Coord:new(1, 0, 0), "coord equality works across floating boundries")
 end
 
 local MineContext = {}
@@ -206,35 +256,43 @@ function MineContext:new(width, height, home)
     function m:moveabs(to)
         self:move(to:sub(self.pos))
     end
+    m.moves = Queue:new()
     function m:tick()
-        local moves = Stack:new()
-        local function line_path(vec)
-            local unit = vec:normalised()
-            for _ = Coord:new(), vec, unit do
+        local function line_path(moves, vec)
+            local unit = vec:ceil(vec:normalised())
+            local v = Coord:new()
+            while vec >= v do
+                --print("PUSH: " .. v:tostring() .. " vs " .. vec:tostring())
                 moves:push(unit)
+                v = v:add(unit)
             end
         end
-        --print("tick: " .. self.home:tostring())
-        if self.pos.x >= self.max_width and self.pos.y >= self.max_height then -- top right
-            moves:push(Coord:z(1))
-            moves:push(Coord:)
-        elseif self.corner ~= 'topleft' and self.pos.x <= self.home.x and self.pos.y >= self.max_height then
-            target.z = target.z + 1
-            self.corner = 'topleft'
-        elseif self.pos.x >= self.max_width and self.pos.y > self.home.y then
-            target.x = target.x - 1
-        elseif self.pos.x >= self.max_width then
-            target.y = target.y + 1
-            self.corner = 'botright'
-        elseif self.pos.x <= self.home.x and self.pos.y <= self.home.y then
-            print("mov y")
-            target.y = target.y + 1
-        elseif self.pos.x <= self.home.x then
-            print("mov x")
-            target.x = target.x + 1
+        local function path_iterator()
+            local function in_and_d(initial)
+                self.moves:push(Coord:z(1))
+                local last_sign = initial
+                for _ = 1, self.max_width do
+                    line_path(self.moves, Coord:y(last_sign):mul(self.max_height)) -- Down
+                    last_sign = last_sign * -1
+                    self.moves:push(Coord:x(initial))
+                end
+                return self.moves:pop()
+            end
+            return function()
+                if not self.moves:empty() then
+                    return self.moves:pop()
+                elseif self.pos == self.home then -- in and up, botleft
+                    print("home")
+                    return in_and_d(1)
+                elseif self.pos.x >= self.max_width and self.pos.y >= self.max_height then -- in and down, topright
+                    print("topleft")
+                    return in_and_d(-1)
+                else -- we're out of position, reset
+                    return self.home
+                end
+            end
         end
-        print("mov: ", table.tostring(target))
-        self:move(target)
+        self:move(path_iterator()())
     end
     m.max_width = tonumber(width)
     m.max_height = tonumber(height)
@@ -273,8 +331,7 @@ local function handle_start_cmd(context, width, height)
         ctx.home = Coord:new()
         while true do
             if not xpcall(function() ctx:tick() end, function(err) print("error while mining: ", err) end) then
-                print("aborting mine due to errors")
-                break
+                print("errors in tick")
             end
             os.sleep(0.1)
         end
@@ -338,7 +395,8 @@ function RunContext:new()
             start = { '(%d+) (%d+)', handle_start_cmd },
             stop = { nil, handle_stop_cmd },
             exit = {nil, handle_exit_cmd },
-            move = {string.format('(%s) (%s) (%s)', DIGIT_PATTERN, DIGIT_PATTERN, DIGIT_PATTERN), handle_movrel_cmd  }
+            move = {string.format('(%s) (%s) (%s)', DIGIT_PATTERN, DIGIT_PATTERN, DIGIT_PATTERN), handle_movrel_cmd  },
+            test = {nil, function() test() end  },
         }
         local resolved_cmd = cmd_tbl[cmd]
         if resolved_cmd == nil then
@@ -346,12 +404,11 @@ function RunContext:new()
             return
         end
         print(args_raw)
-        local args = (resolved_cmd[1] ~= nil) and table.from_generator(string.gmatch(args_raw, resolved_cmd[1]))
+        local args = ((resolved_cmd[1] ~= nil) and table.from_generator(string.gmatch(args_raw, resolved_cmd[1]))) or nil
         if args == nil then
             args = {}
             print("nil args")
         end
-        print(table.tostring(args))
         resolved_cmd[2](self, table.unpack(args))
     end
 
@@ -369,6 +426,7 @@ function RunContext:new()
     end
     return ctx
 end
+
 
 
 RunContext:new():mainloop()
