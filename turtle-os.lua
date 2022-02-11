@@ -50,6 +50,11 @@ function Queue:new()
     function s:empty()
         return self._front == self._back
     end
+    function s:clear()
+        while not self:empty() do
+            self:pop()
+        end
+    end
     return s
 end
 
@@ -293,13 +298,11 @@ function MineContext:new(width, height, home)
                 if not self.moves:empty() then
                     return self.moves:pop()
                 elseif self.pos.x == self.home.x and self.pos.y == self.home.y then -- in and up, botleft
-                    print("home")
                     return in_and_d(1)
                 elseif self.pos.x >= self.max_width and ((((self.max_width % 2 == 1) and self.pos.y >= self.max_height) or (self.pos.y <= self.home.y))) then -- in and down, topright
-                    print("topleft")
                     return in_and_d(-1)
                 else -- we're out of position, reset
-                    print("reset")
+                    self.moves:clear();
                     return self.home
                 end
             end
@@ -317,10 +320,10 @@ end
 
 local function handle_stop_cmd(context)
     if context.mine_thread == nil then
-        print("not running!")
         return
     end
     context.mine_thread:kill()
+    context.mine_thread = nil
 end
 local function handle_moveabs_cmd(context, tox, toy, toz)
     if context.mine_thread ~= nil then
@@ -344,8 +347,9 @@ local function handle_start_cmd(context, width, height)
         while true do
             if not xpcall(function() ctx:tick() end, function(err) print("error while mining: ", err) end) then
                 print("errors in tick")
+                break
             end
-            os.sleep(0.1)
+            os.sleep(0.01)
         end
     end, table.deepcopy(context.minectx))
     print("started mining")
