@@ -61,7 +61,7 @@ function table.deepcopy(tbl)
         end
         out[k] = v
     end
-    return out
+    return setmetatable(out, getmetatable(tbl))
 end
 
 function table.tostring(tbl)
@@ -152,7 +152,7 @@ function Coord:new(x, y, z)
         __lt = function(lhs, rhs)
             return lhs.x < rhs.x and lhs.y < rhs.y and lhs.z < rhs.z
         end,
-        __le = function(lhs, rhs) return lhs == rhs or lhs < rhs end,
+        __le = function(lhs, rhs) return lhs.y <= rhs.y and lhs.x <= rhs.x and lhs.z <= rhs.z end,
     })
 end
 
