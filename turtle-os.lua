@@ -162,6 +162,13 @@ function table.from_generator(gen)
     return out
 end
 
+local function handle_exit_cmd(ctx)
+    if ctx.mine_thread ~= nil then
+        handle_stop_cmd(ctx)
+    end
+    ctx.running = false
+end
+
 local RunContext = {}
 function RunContext:new()
     local ctx = {}
@@ -177,12 +184,13 @@ function RunContext:new()
             end
         end
         io.stdout:write("> ")
-        local ent_raw = io.stdin:read('*l')
+        local ent_raw = io.stdin:read("*L")
         local cmd, args_raw = unpack_ent(ent_raw)
         local cmd_tbl = {
             moveabs = { string.format('(%s) (%s) (%s)', DIGIT_PATTERN, DIGIT_PATTERN, DIGIT_PATTERN), handle_moveabs_cmd },
             start = { '(%d+) (%d+)', handle_start_cmd },
             stop = { nil, handle_stop_cmd },
+            exit = {nil, handle_exit_cmd },
         }
         local resolved_cmd = cmd_tbl[cmd]
         if resolved_cmd == nil then
