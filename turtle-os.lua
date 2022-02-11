@@ -44,6 +44,13 @@ function Coord:new(x, y, z)
         return '{ x: ' .. self.x .. ", y: " .. self.y .. ', z: ' .. self.z .. " }"
     end
 
+    function c:add(b)
+        local rs = table.deepcopy(self)
+        rs.x = self.x + b.x
+        rs.y = self.y + b.y
+        rs.z = self.z + b.z
+        return rs
+    end
     function c:sub(b)
         local rs = table.deepcopy(self)
         rs.x = self.x - b.x
@@ -61,7 +68,6 @@ function MineContext:new(width, height, home)
     local m = {}
 
     function m:move(to)
-        print(table.tostring(robot))
         local translate = to:sub(self.pos)
         if translate.z > 0 then
             for i = 0, translate.z do
@@ -92,6 +98,7 @@ function MineContext:new(width, height, home)
                 robot.move(sides.left)
             end
         end
+        print("move: " .. self.pos:tostring() .. ' -> ' .. to:tostring())
         self.pos = to
     end
     function m:tick()
@@ -112,7 +119,6 @@ function MineContext:new(width, height, home)
         elseif self.pos.x <= self.home.x then
             target.x = target.x + 1
         end
-        print("move: " .. self.pos:tostring() .. ' -> ' .. target:tostring())
         self:move(target)
     end
     m.max_width = width
@@ -135,7 +141,8 @@ local function handle_moveabs_cmd(context, tox, toy, toz)
         print("cannot move while mining, please run stop first")
         return
     end
-    context.minectx:move(Coord:new(tox, toy, toz))
+    local to = Coord:new(tox, toy, toz)
+    context.minectx:move(to:sub(context.minectx.pos))
 end
 
 local function handle_start_cmd(context, width, height)
@@ -150,15 +157,22 @@ local function handle_start_cmd(context, width, height)
     end, table.deepcopy(context.minectx))
     print("started mining")
 end
-DIGIT_PATTERN = "[(%-%d+)(%d+)]"
+
+function table.extend(from, other)
+    for _, v in pairs(other) do
+        if type(v) == 'table' then
+            table.extend(from, v)
+        else
+            table.insert(from, v)
+        end
+    end
+end
+
+DIGIT_PATTERN = "[%-%d]+"
 
 function table.from_generator(gen)
     local out = {}
-    local i = 1
-    for v in gen do
-        out[i] = v
-        i = i + 1
-    end
+    table.extend(out, table.pack(gen()))
     return out
 end
 
@@ -167,6 +181,16 @@ local function handle_exit_cmd(ctx)
         handle_stop_cmd(ctx)
     end
     ctx.running = false
+end
+
+local function handle_movrel_cmd(ctx, dx, dy, dz)
+    if ctx.mine_thread ~= nil then
+        print("cannot move while mining")
+        return
+    end
+    local to = Coord:new(dx, dy, dz)
+    print("movecmd: " .. to:tostring() .. " : " .. Coord:new(tonumber(dx), tonumber(dy), tonumber(dz)):tostring())
+    ctx.minectx:move(to)
 end
 
 local RunContext = {}
@@ -187,17 +211,24 @@ function RunContext:new()
         local ent_raw = io.stdin:read("*L")
         local cmd, args_raw = unpack_ent(ent_raw)
         local cmd_tbl = {
-            moveabs = { string.format('(%s) (%s) (%s)', DIGIT_PATTERN, DIGIT_PATTERN, DIGIT_PATTERN), handle_moveabs_cmd },
+            moveabs = { '(%d+) (%d+) (%d+)', handle_moveabs_cmd },
             start = { '(%d+) (%d+)', handle_start_cmd },
             stop = { nil, handle_stop_cmd },
             exit = {nil, handle_exit_cmd },
+            move = {string.format('(%s) (%s) (%s)', DIGIT_PATTERN, DIGIT_PATTERN, DIGIT_PATTERN), handle_movrel_cmd  }
         }
         local resolved_cmd = cmd_tbl[cmd]
         if resolved_cmd == nil then
             print("unknown command: '" .. cmd .. "'")
             return
         end
-        local args = ((resolved_cmd[1] ~= nil) and table.from_generator(string.gmatch(args_raw, resolved_cmd[1]))) or {}
+        print(args_raw)
+        local args = (resolved_cmd[1] ~= nil) and table.from_generator(string.gmatch(args_raw, resolved_cmd[1]))
+        if args == nil then
+            args = {}
+            print("nil args")
+        end
+        print(table.tostring(args))
         resolved_cmd[2](self, table.unpack(args))
     end
 
